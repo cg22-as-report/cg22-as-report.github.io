@@ -1,0 +1,895 @@
+<!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.0 Transitional//EN' 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'>
+<html xmlns='http://www.w3.org/1999/xhtml' xml:lang='en' lang='en'>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Computer Graphics - Final Project</title>
+
+    <link href="resources/bootstrap.min.css" rel="stylesheet">
+    <link href="resources/offcanvas.css" rel="stylesheet">
+    <link href="resources/custom2014.css" rel="stylesheet">
+    <link href="resources/twentytwenty.css" rel="stylesheet" type="text/css" />
+    <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+      <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+      <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- MathJax scripts -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script type="text/javascript" id="MathJax-script" async
+      src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js">
+    </script>
+</head>
+
+<body>
+
+<div class="container headerBar">
+		<h1>Final Project Report - Wang, Shaofei</h1>
+</div>
+
+<div class="container contentWrapper">
+<div class="pageContent">
+
+	<!-- ================================================================= -->
+
+	<h2>Motivation Image</h2>
+
+    <center>
+    <img width="80%" height="auto" src="images/motivation.jpeg" alt="Motivation Image"/> <br> <br>
+
+    <p><a href="https://stock.adobe.com/search?k=tree+in+light+bulb&asset_id=501999319">Source</a></p>
+    </center>
+
+    <p>A tree appears in an out-of-place location - inside a light bulb. This conceptual art has been used to raise awareness of energy saving, which also corresponds to what we are facing right now. The soil and grass should be generated via procedural texturing, while the tree can be modeled with a mesh and texture maps. The scene should be lit with an environment map emitter, and rendered with advanced camera effects such as depth-of-field, chromatic aberration, etc. </p>
+
+	<!-- ================================================================= -->
+
+	<h2>Feature List</h2>
+
+    <p>Environment Map Emitter (15 pts)</p>
+
+    <p>Disney BSDF (15 pts) </p>
+
+    <p>Images as Textures (5 pts)</p>
+
+    <p>Procedural Textures (5 pts)</p>
+
+    <p>Advanced Camera Models (15 pts) - depth of field, lens distortion, chromatic aberration</p>
+
+    <p>Rendering using the Euler cluster (5 pts)</p>
+
+	<h2>Environment Map Emitter</h2>
+
+	<ul>
+        <li class="codelist">
+            <code> include/nori/mipmap.h </code>
+        </li>
+        <li class="codelist">
+            <code> src/envmaplight.cpp </code>
+        </li>
+        <li class="codelist">
+            <code> src/hdri_sample_test.cpp </code>
+        </li>
+	</ul>
+
+    <p>Environment map emitter is essential for modeling natural lighting and achieving realistic rendering. It represents lights coming from a inifinitely far away sphere enclosing the entire scene. Such a light sphere can be captured using environment cameras and represented as a HDR image (HDRI). The <code>EnvironmapMapEmitter</code> class stores such a HDRI in a <code>MIPMap</code> data structure (not graded). In the path tracer, if a ray escapes the scene (i.e. it does not hit any scene geometry), there is an additional step to check whether an environment map emitter is present - if there is one, we add the contribution from the environment map emitter to this path. Multiple Importance Sampling (MIS) is also used when applicable.</p>
+
+	<h3>Coordinate Representation</h3>
+
+    <p>The <code>EnvironmapMapEmitter</code> class normalizes the size of the loaded HDRI to \( [0, 1]^2 \). When querying the environment map, a ray direction \(w = (x, y, z) \in [0, 1]^3 \) will be converted to (normalized) spherical coordinates \( (u, v) \in [0, 1]^2 \) as follows:</p>
+
+    <p>
+    $$ 
+    \begin{aligned}
+        u &= \begin{cases} \frac{\arctan(y, x)}{2 \pi} & \text{if} \arctan(y, x) \ge 0 \\ \frac{\arctan(y, x)}{2 \pi} + 1 & \text{if} \arctan(y, x) < 0 \end{cases} \\
+        v &= \frac{\arccos(z)}{\pi}
+    \end{aligned}
+    $$
+    </p>
+
+	<h3>Radiance Evaluation</h3>
+
+    <p>Once we confirmed the coordinate representation, we can implement the radiance evaluation function <code>eval()</code> by converting the incoming ray direction from world coordinate to local emitter coordinate, and then to \( uv \) as decribed in the previous section, and simply lookup a (filtered) texel from the underlying <code>MIPMap</code> instance that holds the loaded HDRI. </p>
+
+	<h3>Importance Sampling</h3>
+
+    <p>As with other types of emitters, <code>EnvironmapMapEmitter</code> should also support importance sampling. I follow the PBR textook&code and implement <code>sample()</code> and <code>pdf()</code> methods. </p>
+
+	<h4>Sampling from 1D Piecewise Constant Function</h4>
+
+    <p>To begin with, we need to sample a piecewise constant 1D function. Such functionality is handled by the class <code>Distribution1D</code>, which is copied from PBRT-v3 code repository and adapted to Nori framework. Given a sequence of \( N \) values \( v_0, v_1, \cdots, v_{N-1} \) for values between equal intervals \([x_0, x_1), [x_1, x_2), \cdots, [x_{N-1}, x_N] \), we first compute the CDF function \( P(x) \) as:</p>
+
+    <p>
+    $$ 
+    \begin{aligned}
+        P(x_0) &= 0 \\
+        P(x_i) &= P(x_{i-1}) + \frac{v_{i-1}}{cN} \\
+        c &= \sum_0^{N-1} \frac{v_i}{N}
+    \end{aligned}
+    $$
+    </p>
+
+    <p>To obtain a sample from such a distribution via a uniform sample \( \xi \in [0, 1] \), simply apply the invert CDF by conducting binary search to find a pair \( x_i, x_{i+1} \) such that \( P(x_i) \le \xi \) and \( \xi \le P(x_{i+1}) \), and return the linearly interpolated sample \( (x_i + \frac{\xi - P(x_i)}{P(x_{i+1}) - P(x_i)}) / N \) with its probability being \( v_{x_i} / c \)</p>
+
+	<h4>Sampling from 2D Piecewise Constant Function</h4>
+
+    <p>With <code>Distribution1D</code>, we can continue to construct <code>Distribution2D</code> which samples from a 2D piecewise constant function, e.g. the luminance map of a environment HDRI. This class is also copied from PBRT-v3 code repository and adapted to Nori framework. The idea is to compute marginal distributions \( p(v) = \int p(u, v) du \) and sample \( v' \) from \( p(v) \) then sample \( u \) from the conditional distribution \( p( u | v = v' ) \). Following PBR textbook 13.6.7, let a HDRI be defined by a set of \( n_u, n_v \) values \( f[u_i, v_j] \) where \( u_i \in [0, 1, \cdots, n_u - 1 ], v_j \in [0, 1, \cdots, n_v - 1] \), \( f[u_i, v_j] \) describes the constant value over the range \( [\frac{i}{n_u}, \frac{i+1}{n_u}] \times [\frac{j}{n_v}, \frac{j+1}{n_v}] \). Given a continuous sample \( (u, v) \in [0, 1)^2 \), we denote \( \tilde{u} = \lfloor n_u u \rfloor, \tilde{v} = \lfloor n_v v \rfloor \). The marginal distribution \( p (v) \) and the joint distribution \( p (u, v) \) can be described as:</p>
+
+    <p>
+    $$ 
+    \begin{aligned}
+        p(u, v) &= \frac{f[\tilde{u}, \tilde{v}]}{I_f} \\
+        p(v) &= \frac{(1 / n_u) \sum_i f[u_i, \tilde{v}]}{I_f}
+    \end{aligned}
+    $$
+    where
+    $$ 
+    \begin{aligned}
+    I_f = \frac{1}{n_u n_v} \sum_{i=0}^{n_u - 1} \sum_{j=0}^{n_v - 1} f[u_i, v_i]
+    \end{aligned}
+    $$
+    </p>
+
+    <p>Let us denote \( p[\tilde{v}] \) to be a descretized equivalence of \(p(v)\), we have the conditional distribution \( p(u | v) \): </p>
+
+    <p>
+    $$ 
+    \begin{aligned}
+        p(u | v) = \frac{p(u, v)}{p(v)} = \frac{f[\tilde{u}, \tilde{v}] / I_f}{p[\tilde{v}]}
+    \end{aligned}
+    $$
+    </p>
+
+    <p>eventually we will have \( n_v \) such conditional distributions. Sampling from \( p(v) \) as well as from \( p(u | v) \) can be done as sampling from 1D distributions. </p>
+
+	<h4>Sampling with respect to Solid Angle Measurement</h4>
+
+    <p>So far we can do sampling over the \( uv \) domain. What remains is to sample w.r.t. solid angle. To map \( (u, v) \) to the spherical coordinate \( (\theta, \phi) \), we use a simple function \( g(u, v) = (\theta, \phi) = (\pi v, 2 \pi u) \). Applying multidimensioinal change of variables rule (pbrt 13.5.1), we have: </p>
+
+    <p>
+    $$ 
+    \begin{aligned}
+        p(\theta, \phi) = \frac{p(u, v)}{2 \pi^2} \\
+        p(\omega) = \frac{p(u, v)}{2 \pi^2 \sin{\theta}}
+    \end{aligned}
+    $$
+    </p>
+
+    <p> A trick from the PBR textbook is that we can weight HDRI values \( f[u_i, v_i] \) with \( \sin{\theta} \), which does not affect the correctness of sampling but cancels the oversampling towards poles on a sphere. </p>
+
+	<h3>Validation</h3>
+
+    <p>I first show importance sampling of environment map emitter using different HDR images (<code>scenes/final-proj/tests/hdri-sample-test.xml</code>): </p>
+
+    <div class="twentytwenty-container">
+        <img src="images/mine/tests/hdri_sample_test0.png" alt="HDRI test 1" class="img-responsive">
+    </div>
+    <div class="twentytwenty-container">
+        <img src="images/mine/tests/hdri_sample_test1.png" alt="HDRI test 2" class="img-responsive">
+    </div>
+    <br> <br>
+
+    Next, I demonstrate effectiveness of multiple importance sampling by comparing MATS path-tracer and MIS path-tracer at 512 spp (<code>scenes/final-proj/envmap/matpreview_diffuse*.xml</code> and <code>scenes/final-proj/envmap/matpreview_microfacet*.xml</code>):  
+    <div class="twentytwenty-container">
+        <img src="images/mine/envmap/matpreview_diffuse_mats.png" alt="MATS" class="img-responsive">
+        <img src="images/mine/envmap/matpreview_diffuse.png" alt="MIS" class="img-responsive">
+    </div>
+    <div class="twentytwenty-container">
+        <img src="images/mine/envmap/matpreview_microfacet_mats.png" alt="MATS" class="img-responsive">
+        <img src="images/mine/envmap/matpreview_microfacet.png" alt="MIS" class="img-responsive">
+    </div>
+    <br> <br>
+
+    <p>Then I also test path tracer with multiple importance sampling to verify if I can get close enough result compared to Mitsuba3 (<code>scenes/final-proj/envmap/matpreview_diffuse.xml</code> and <code>scenes/final-proj/envmap/matpreview_mirror.xml</code>): </p>
+
+    <div class="twentytwenty-container">
+        <img src="images/mine/envmap/matpreview_diffuse.png" alt="Mine (Diffuse)" class="img-responsive">
+        <img src="images/reference/envmap/matpreview_diffuse.png" alt="Mitsuba3" class="img-responsive">
+    </div>
+    <div class="twentytwenty-container">
+        <img src="images/mine/envmap/matpreview_mirror.png" alt="Mine (Mirror)" class="img-responsive">
+        <img src="images/reference/envmap/matpreview_mirror.png" alt="Mitsuba3" class="img-responsive">
+    </div> <br>
+
+    <p>There is a very small, almost unnoticeable misalignment between implemented environment map and the one from Mitsuba3. This could be caused by differences in processing of HDRI or coordinate mapping, but Mitsuba3's environment map emitter is poorly documented and the code has minimal comments. Furthermore, the shading on the foreground object looks almost identical, thus I believe the environment map emitter itself should be implemented correctly. </p>
+
+	<h2>Disney BRDF</h2>
+
+	<ul>
+        <li class="codelist">
+            <code> include/nori/warp.h </code>
+        </li>
+        <li class="codelist">
+            <code> src/warp.cpp </code>
+        </li>
+        <li class="codelist">
+            <code> src/warptest.cpp </code>
+        </li>
+        <li class="codelist">
+            <code> src/disney.cpp </code>
+        </li>
+	</ul>
+
+    <p>Disney BRDF aims to provide intuitive yet still (to some extent) physically based parameterizations of surface materials. I implemented 8 out of the 10 parameters which are listed below: </p>
+
+	<ul>
+        <li>subsurface (for grading)</li>
+        <li>metallic (for grading)</li>
+        <li>specular</li>
+        <li>specularTint</li>
+        <li>roughness (for grading)</li>
+        <li>anisotropic</li>
+        <li>clearcoat (for grading)</li>
+        <li>clearcoatGloss (for grading)</li>
+	</ul>
+
+    <p>Since only 5 parameters are required for grading, I marked those parameters I submit for grading in case TAs need this information. Every parameter should have a range in \([0, 1]\)</p>
+
+    <p>We define notations in the local shading frame as follows: \( \omega_o = (x_o, y_o, z_o) \) is the outgoing direction from the surface towards the emitter, \( \omega_i = (x_i, y_i, z_i) \) is the direction from the surface towards the camera, \( \omega_h = (x_h, y_h, z_h) \) is the half vector between them. \( \theta_o \), \( \theta_i \), and \( \theta_h \) are their corresponding angles between the surface normal, and I assume their values are always less than 90 degrees (otherwise the <code>eval()</code>, <code>sample()</code>, and <code>pdf()</code> functions will just return 0s). Also denote \( \phi_h \) as the azimuth angle of \( \omega_h \). The implementation of Disney BRDF mainly follows <a href="https://media.disneyanimation.com/uploads/production/publication_asset/48/asset/s2012_pbs_disney_brdf_notes_v3.pdf">the original paper</a>, <a href="https://cseweb.ucsd.edu/~tzli/cse272/homework1.pdf">course note of UCSD CSE 272</a>, and the <a href="https://github.com/wdas/brdf/blob/main/src/brdfs/disney.brdf">official code</a> </p>
+
+	<h3>Diffuse (related parameters: subsurface, roughness)</h3>
+
+    <p>Disney BRDF uses Schlick Fresnel approximation for its diffuse term:</p>
+
+    <p>
+    $$ 
+    \begin{aligned}
+    f_{\text{baseDiffuse}} &= \frac{\text{baseColor}}{\pi} F_D(\theta_i)F_D(\theta_o) \\
+        F_D(\theta) &= 1 + (F_{D90} - 1)(1 - \cos{\theta})^5 \\
+        F_{D90} &= \frac{1}{2} + 2 \cdot \text{roughness} \cdot \left| \omega_h \cdot \omega_o \right|^2
+    \end{aligned}
+    $$
+    </p>
+    <p>where \(\text{baseColor}\) is specified either by a constant albedo or a texture map.</p>
+
+    <p>To approximation to real subsurface scattering process, Disney BRDF also have a subsurface scattering term:</p>
+
+    <p>
+    $$ 
+    \begin{aligned}
+        f_{\text{subsurface}} &= \frac{1.25 \text{baseColor}}{\pi} \left( F_{SS}(\theta_i)F_{SS}(\theta_o) \left( \frac{1}{\cos{\theta_i} + \cos{\theta_o}} - 0.5 \right) + 0.5 \right) \\
+        F_{SS}(\theta) &= 1 + (F_{SS90} - 1)(1 - \cos{\theta})^5 \\
+        F_{SS90} &= \text{roughness} \cdot \left| \omega_h \cdot \omega_o \right|^2
+    \end{aligned}
+    $$
+    </p>
+
+    <p>The subsurface term linearly combines \( f_{\text{baseDiffuse}} \) and \( f_{\text{subsurface}} \):</p>
+
+    <p>
+    $$ 
+    \begin{aligned}
+    f_{\text{diffuse}} = (1 - \text{subsurface}) \cdot f_{\text{baseDiffuse}} + \text{subsurface} \cdot f_{\text{subsurface}}
+    \end{aligned}
+    $$
+    </p>
+
+	<h3>Metal (related parameters: metallic, specular, specularTint, anisotropic, roughness)</h3>
+
+    <p>Disney BRDF's specular component consists of two lobes: a main specular lobe modeled with GTR2 distribution, and a secondary "clearcoat" lobe modeled with GTR1 distribution. Here we define the main specular lobe as the "metal" component and describe it in details. The clearcoat lobe will be described in the later section.</p>
+
+    <p>Formally, the metal component follows a standard Cook-Torrance microfacet BRDF.</p>
+    <p>
+    $$ 
+    \begin{aligned}
+        f_{\text{metal}} &= \frac{F_m D_m G_m}{4 \cos{\theta_i} \cos{\theta_o}}
+    \end{aligned}
+    $$
+    </p>
+
+    <p>The Fresnel term \( F_m \) is defined as:</p>
+    <p>
+    $$ 
+    \begin{aligned}
+        F_m &= C_0 + (1 - C_0)\left( 1 - \omega_h \cdot \omega_o \right)^5 \\
+        C_0 &= \text{specular} \cdot 0.08 \cdot (1 - \text{metallic}) K_s + \text{metallic} \cdot \text{baseColor} \\
+        K_s &= (1 - \text{specularTint}) + \text{specularTint} \cdot C_{\text{tint}} \\
+        C_{\text{tint}} &= \text{baseColor} / \text{lum}(\text{baseColor})
+    \end{aligned}
+    $$
+    </p>
+    <p>where \( \text{lum} (\text{baseColor}) \) can be computed using the <code>Color3f::getLuminance()</code> method.</p>
+
+    <p>The \( D_m \) follows the anisotropic GTR2 distribution as described in the original paper:</p>
+    <p>
+    $$ 
+    \begin{aligned}
+    D_m(\theta_h, \phi_h) = \frac{1}{\pi \alpha_x \alpha_y \left(\sin^2{\theta_h} \left(\frac{\cos^2{\phi_h}}{\alpha_x^2} + \frac{\sin^2{\phi_h}}{\alpha_y^2}\right) + \cos^2{\theta_h} \right) ^ 2} 
+    \end{aligned}
+    $$
+    </p>
+    <p>or equivalently:</p>
+    <p>
+    $$ 
+    \begin{aligned}
+    D_m(x_h, y_h, z_h) &= \frac{1}{\pi \alpha_x \alpha_y \left(\frac{(x_h)^2}{\alpha_x^2} + \frac{(y_h)^2}{\alpha_y^2} + (z_h)^2 \right) ^ 2} \\
+    \text{aspect} &= \sqrt{1 - 0.9 \text{anisotropic}} \\
+    \alpha_x &= \max ( 0.001, \text{roughness}^2 / \text{aspect} ) \\
+    \alpha_y &= \max ( 0.001, \text{roughness}^2 \cdot \text{aspect} ) \\
+    \end{aligned}
+    $$
+    </p>
+
+    <p>To sample a unit vector \(\omega_h = ( x_h, y_h, z_h ) \) from such a distribution with consine foreshortening using random variables \( (\xi_1, \xi_2) \in [0, 1]^2 \), we follow the original paper (appendix B.2):</p>
+    <p>
+    $$ 
+    \begin{aligned}
+    \sin{\phi_h} &= \alpha_y \sin{2 \pi \xi_1} \\
+    \cos{\phi_h} &= \alpha_y \cos{2 \pi \xi_1} \\
+    \tan{\theta_h} &= \sqrt{\frac{\xi_2}{1 - \xi_2}} \\
+    \omega_h^{\prime} &= \tan{\theta_h} \left( \cos{\phi_h} \cdot (1, 0, 0) + \sin{\phi_h} \cdot (0, 1, 0) \right) + (0, 0, 1) \\
+    \omega_h &= \frac{\omega_h^{\prime}}{\lVert \omega_h^{\prime} \rVert}
+    \end{aligned}
+    $$
+    </p>
+
+    <p> The mask and shadowing term \( G_m \) is defined as:</p>
+    <p>
+    $$ 
+    \begin{aligned}
+    G_m &= G_m(\theta_o) G_m(\theta_i) \\
+    G_m(\omega) &= \frac{1}{1 + \Lambda_m(\omega)} \\
+    \Lambda_m(\omega) &= \frac{\sqrt{1 + \frac{(\alpha_x x)^2 + (\alpha_y y)^2}{z^2}} - 1}{2}
+    \end{aligned}
+    $$
+    </p>
+
+    <p>Additionally, to support anisotropic BRDF, we need to compute continuous tangent space on shape surfaces. I implemented continuous tangent space for both sphere and triganle mesh, which will be elaborated in the "Other Features" section as it is not part of the graded features.</p>
+
+	<h3>Clearcoat (related parameters: clearcoatGloss)</h3>
+
+    <p>Now we describe the implmentation of the secondary clearcoat specular lobe. This lobe also follows the Cook-Torrance microfacet model:</p>
+    <p>
+    $$ 
+    \begin{aligned}
+        f_{\text{clearcoat}} = \frac{F_c D_c G_c}{4 \cos{\theta_i} \cos{\theta_o}}
+    \end{aligned}
+    $$
+    </p>
+    <p>in which each term is defined as follows:</p>
+    <p>
+    $$ 
+    \begin{aligned}
+    F_c &= R_0 (\eta=1.5) + (1 -R_0(\eta=1.5))(1 - \omega_h \cdot \omega_o)^5 \\
+    D_c &= \frac{\alpha^2 - 1}{\pi \log(\alpha^2) \left( 1 + (\alpha^2 - 1) \cos^2{\theta_h} \right)} \\
+    G_c &= G_c(\theta_o) G_c(\theta_i) \\
+    G_c(\omega) &= \frac{1}{1 + \Lambda_c(\omega)} \\
+    \Lambda_c(\omega) &= \frac{\sqrt{1 + \frac{(\alpha x)^2 + (\alpha y)^2}{z^2}} - 1}{2} \\
+    \alpha &= (1 - \text{clearcoatGloss}) \cdot 0.1 + \text{clearcoatGloss} \cdot 0.001
+    \end{aligned}
+    $$
+    </p>
+    <p>where \( R_0 (\eta) \) maps the index of refraction \( \eta \) according to the following:</p>
+    <p>
+    $$ 
+    \begin{aligned}
+    R_0 (\eta) = \frac{(\eta - 1)^2}{(\eta + 1)^2} \\
+    \end{aligned}
+    $$
+    </p>
+    <p>thus  \( R_0 (\eta=1.5) = 0.04 \).
+
+    <p>To sample a unit vector \(\omega_h = ( x_h, y_h, z_h ) \) from \( D_c \) with consine foreshortening using random variables \( (\xi_1, \xi_2) \in [0, 1]^2 \), we follow the UCSD CSE 272 course note:</p>
+    <p>
+    $$ 
+    \begin{aligned}
+    \phi_h &= 2 \pi \xi_1 \\
+    \cos{\theta_h} &= \sqrt{ \frac{1 - \alpha^{2 - 2 \xi_2}}{1 - \alpha^2} } \\
+    \sin{\theta_h} &= \sqrt{1 - \cos^2{\theta_h}} \\
+    x_h &= \sin{\theta_h} \cos{\phi_h} \\
+    y_h &= \sin{\theta_h} \sin{\phi_h} \\
+    z_h &= \cos{\theta_h}
+    \end{aligned}
+    $$
+    </p>
+
+	<h3>Putting Everything Together (relative parameters: metallic, clearcoat)</h3>
+
+    <p>Finally, we put all three terms \( f_{\text{diffuse}} \), \( f_{\text{metal}} \), and \( f_{\text{clearcoat}} \) together to produce the final BRDF function:</p>
+    <p>
+    $$ 
+    \begin{aligned}
+        f_{\text{brdf}} = (1 - \text{metallic}) f_{\text{diffuse}} + f_{\text{metal}} + 0.25 \cdot \text{clearcoat} \cdot f_{\text{clearcoat}}
+    \end{aligned}
+    $$
+    </p>
+
+    <p>The original Disney paper does not specify the pdf of the BRDF described above. Thus different implementations usually define different sampling pdf according to their own application need. Here we define the pdf as:</p>
+    <p>
+    $$ 
+    \begin{aligned}
+    \text{pdf} (\omega_h, \omega_o) &= \frac{w_{\text{diffuse}} \cos{\theta_o}}{\pi} + \frac{\left( w_{\text{metal}} D_m (\omega_h) + w_{\text{clearcoat}} D_c(\omega_h) \right) \cos{\theta_h}}{4 \cdot | \omega_o \cdot \omega_h | } \\
+    w_{\text{diffuse}} &= \frac{1 - \text{metallic}}{2 - \text{metallic} + 0.25 \cdot \text{clearcoat}} \\
+    w_{\text{metal}} &= \frac{1}{2 - \text{metallic} + 0.25 \cdot \text{clearcoat}} \\
+    w_{\text{clearcoat}} &= \frac{0.25 \cdot \text{clearcoat}}{2 - \text{metallic} + 0.25 \cdot \text{clearcoat}} 
+    \end{aligned}
+    $$
+    </p>
+
+    <p>I also note that the above formulation is NOT energy conserving, i.e. the BRDF might relfect more energy than the total incident energy to it. This can result in "firefly" artifacts under some scenario. Thus we also have another version of (not strictly) "energy conserving" formulation:</p>
+    <p>
+    $$ 
+    \begin{aligned}
+    f_{\text{brdf}} = (1 - \text{metallic}) f_{\text{diffuse}} + \text{metallic} \cdot \left( f_{\text{metal}} + 0.25 \cdot \text{clearcoat} \cdot f_{\text{clearcoat}} \right)
+    \end{aligned}
+    $$
+    </p>
+    <p>For sampling, the general pdf remains unchanged; we just need to modify \( w_{\text{diffuse}} \), \( w_{\text{metal}} \), and \( w_{\text{clearcoat}} \):</p>
+    <p>
+    $$ 
+    \begin{aligned}
+    w_{\text{diffuse}} &= \frac{1 - \text{metallic}}{1 + \text{metallic} \cdot 0.25 \cdot \text{clearcoat}} \\
+    w_{\text{metal}} &= \frac{\text{metallic}}{1 + \text{metallic} \cdot 0.25 \cdot \text{clearcoat}} \\
+    w_{\text{clearcoat}} &= \frac{\text{metallic} \cdot 0.25 \cdot \text{clearcoat}}{1 + \text{metallic} \cdot 0.25 \cdot \text{clearcoat}} 
+    \end{aligned}
+    $$
+    </p>
+
+    <p>While this resolves the firefly artifacts, it loses some specular effect under certain parameter combinations. Eventually I employ a hybrid method similar to <a href="http://shihchinw.github.io/2015/07/implementing-disney-principled-brdf-in-arnold.html">this blog</a> - I use non-energy-conserving sampling and evaluation for direct illumination, but switch to energy-conserving sampling and evaluation for indirect illumination.</p>
+
+	<h3>Validation</h3>
+
+    <p> First I show warptest of GTR2 and GTR1 distribution at different values: </p>
+	<div class="row">
+		<figure>
+			<div class="column">
+				<img src="images/mine/tests/warptest-vis-GTR2-x5e-2-y5e-2.png" style="width:100%">
+			</div>
+			<div class="column">
+				<img src="images/mine/tests/warptest-chi2-GTR2-x5e-2-y5e-2.png" style="width:100%">
+			</div>
+			<figcaption>GTR2, \( \alpha_x = 0.05, \alpha_y = 0.05 \).</figcaption>
+		</figure>
+	</div> <br>
+	<div class="row">
+		<figure>
+			<div class="column">
+				<img src="images/mine/tests/warptest-vis-GTR2-x2e-1-y2e-1.png" style="width:100%">
+			</div>
+			<div class="column">
+				<img src="images/mine/tests/warptest-chi2-GTR2-x2e-1-y2e-1.png" style="width:100%">
+			</div>
+			<figcaption>GTR2, \( \alpha_x = 0.2, \alpha_y = 0.2 \).</figcaption>
+		</figure>
+	</div> <br>
+	<div class="row">
+		<figure>
+			<div class="column">
+				<img src="images/mine/tests/warptest-vis-GTR2-x8e-1-y8e-1.png" style="width:100%">
+			</div>
+			<div class="column">
+				<img src="images/mine/tests/warptest-chi2-GTR2-x8e-1-y8e-1.png" style="width:100%">
+			</div>
+			<figcaption>GTR2, \( \alpha_x = 0.2, \alpha_y = 0.2 \).</figcaption>
+		</figure>
+	</div> <br>
+	<div class="row">
+		<figure>
+			<div class="column">
+				<img src="images/mine/tests/warptest-vis-GTR2-x2e-1-y2e-2.png" style="width:100%">
+			</div>
+			<div class="column">
+				<img src="images/mine/tests/warptest-chi2-GTR2-x2e-1-y2e-2.png" style="width:100%">
+			</div>
+			<figcaption>GTR2, \( \alpha_x = 0.2, \alpha_y = 0.02 \).</figcaption>
+		</figure>
+	</div> <br>
+	<div class="row">
+		<figure>
+			<div class="column">
+				<img src="images/mine/tests/warptest-vis-GTR2-x3e-1-y1e-1.png" style="width:100%">
+			</div>
+			<div class="column">
+				<img src="images/mine/tests/warptest-chi2-GTR2-x3e-1-y1e-1.png" style="width:100%">
+			</div>
+			<figcaption>GTR2, \( \alpha_x = 0.3, \alpha_y = 0.1 \).</figcaption>
+		</figure>
+	</div> <br>
+	<div class="row">
+		<figure>
+			<div class="column">
+				<img src="images/mine/tests/warptest-vis-GTR2-x1-y5e-1.png" style="width:100%">
+			</div>
+			<div class="column">
+				<img src="images/mine/tests/warptest-chi2-GTR2-x1-y5e-1.png" style="width:100%">
+			</div>
+			<figcaption>GTR2, \( \alpha_x = 1, \alpha_y = 0.5 \).</figcaption>
+		</figure>
+	</div> <br>
+	<div class="row">
+		<figure>
+			<div class="column">
+				<img src="images/mine/tests/warptest-vis-GTR1-5e-2.png" style="width:100%">
+			</div>
+			<div class="column">
+				<img src="images/mine/tests/warptest-chi2-GTR1-5e-2.png" style="width:100%">
+			</div>
+			<figcaption>GTR1, \( \alpha = 0.05 \).</figcaption>
+		</figure>
+	</div> <br>
+	<div class="row">
+		<figure>
+			<div class="column">
+				<img src="images/mine/tests/warptest-vis-GTR1-2e-1.png" style="width:100%">
+			</div>
+			<div class="column">
+				<img src="images/mine/tests/warptest-chi2-GTR1-2e-1.png" style="width:100%">
+			</div>
+			<figcaption>GTR1, \( \alpha = 0.2 \).</figcaption>
+		</figure>
+	</div> <br>
+	<div class="row">
+		<figure>
+			<div class="column">
+				<img src="images/mine/tests/warptest-vis-GTR1-8e-1.png" style="width:100%">
+			</div>
+			<div class="column">
+				<img src="images/mine/tests/warptest-chi2-GTR1-8e-1.png" style="width:100%">
+			</div>
+			<figcaption>GTR1, \( \alpha = 0.8 \).</figcaption>
+		</figure>
+	</div> <br>
+
+    <p> I also construct some random parameter combinations and run through a \( \chi^2 \) test (<code>scenes/final-proj/tests/chi2test-disney.xml</code>) for the BRDF. Both non-energy-conserving and energy-conserving modes are tested. This verifies that <code>sample()</code> and <code>pdf()</code> are consistent. </p>
+    <div class="twentytwenty-container">
+        <img src="images/mine/tests/chi2-disney.png" alt="" class="img-responsive">
+    </div>
+    <br>
+
+    <p> Since the original Disney paper does not specify sampling weights for each term, different implementations tend to have different tweaks to suit their own need (e.g. making the BRDF more physically plausible, using ad-hoc sampling weights, ad-hoc weighting scheme to reduce firefly artifacts, etc.). Thus I do not compare to a reference implementations, e.g. Mitsuba3. Rather, I show varation of parameters and their effects on the rendered result. I present a comparison to Mitsuba3's Principled BRDF in the Images as Textures section. The following image shows variation of parameters on a unit sphere (<code>scenes/final-proj/brdf/sphere/*.xml</code>): </p>
+
+    <div class="twentytwenty-container">
+        <img src="images/mine/brdf/sphere/spheres_with_captions.png" alt="" class="img-responsive">
+    </div>
+    <br> <br>
+
+    <p> I also show parameter variation in a more complex scene with global illumination: </p>
+
+    <div class="twentytwenty-container">
+        <img src="images/mine/brdf/matpreview/disney-subsurface-00.png" alt="subsurface=0.0" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-subsurface-05.png" alt="subsurface=0.5" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-subsurface-08.png" alt="subsurface=0.8" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-subsurface-10.png" alt="subsurface=1.0" class="img-responsive">
+    </div> <br>
+
+    <div class="twentytwenty-container">
+        <img src="images/mine/brdf/matpreview/disney-metallic-00.png" alt="metallic=0.0" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-metallic-05.png" alt="metallic=0.5" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-metallic-08.png" alt="metallic=0.8" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-metallic-10.png" alt="metallic=1.0" class="img-responsive">
+    </div> <br>
+
+    <div class="twentytwenty-container">
+        <img src="images/mine/brdf/matpreview/disney-specular-00.png" alt="specular=0.0" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-specular-05.png" alt="specular=0.5" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-specular-08.png" alt="specular=0.8" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-specular-10.png" alt="specular=1.0" class="img-responsive">
+    </div> <br>
+
+    <div class="twentytwenty-container">
+        <img src="images/mine/brdf/matpreview/disney-specularTint-00.png" alt="specularTint=0.0" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-specularTint-05.png" alt="specularTint=0.5" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-specularTint-08.png" alt="specularTint=0.8" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-specularTint-10.png" alt="specularTint=1.0" class="img-responsive">
+    </div> <br>
+
+    <div class="twentytwenty-container">
+        <img src="images/mine/brdf/matpreview/disney-roughness-00.png" alt="roughness=0.0" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-roughness-05.png" alt="roughness=0.5" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-roughness-08.png" alt="roughness=0.8" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-roughness-10.png" alt="roughness=1.0" class="img-responsive">
+    </div> <br>
+
+    <div class="twentytwenty-container">
+        <img src="images/mine/brdf/matpreview/disney-anisotropic-00.png" alt="anisotropic=0.0" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-anisotropic-05.png" alt="anisotropic=0.5" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-anisotropic-08.png" alt="anisotropic=0.8" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-anisotropic-10.png" alt="anisotropic=1.0" class="img-responsive">
+    </div> <br>
+
+    <div class="twentytwenty-container">
+        <img src="images/mine/brdf/matpreview/disney-clearcoat-00.png" alt="clearcoat=0.0" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-clearcoat-05.png" alt="clearcoat=0.5" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-clearcoat-08.png" alt="clearcoat=0.8" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-clearcoat-10.png" alt="clearcoat=1.0" class="img-responsive">
+    </div> <br>
+
+    <div class="twentytwenty-container">
+        <img src="images/mine/brdf/matpreview/disney-clearcoatGloss-00.png" alt="clearcoatGloss=0.0" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-clearcoatGloss-05.png" alt="clearcoatGloss=0.5" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-clearcoatGloss-08.png" alt="clearcoatGloss=0.8" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney-clearcoatGloss-10.png" alt="clearcoatGloss=1.0" class="img-responsive">
+    </div> <br>
+
+    <p> Lastly, I compose a scene similar to the one presented in <a href="https://cseweb.ucsd.edu/~tzli/cse272/homework1.pdf">UCSD CSE 272</a> (<code>scenes/final-proj/brdf/matpreview/disney_bsdf_array*.xml</code>). I compare the effect of 1) non-energy-conserving mode, 2) energy-conserving mode, and 3) non-energy-conserving for direct illumination but energy-conserving for indirect illumination (Hybrid): </p>
+
+    <div class="twentytwenty-container">
+        <img src="images/mine/brdf/matpreview/disney_bsdf_array_no-ec.png" alt="Non-Energy-Conserving" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney_bsdf_array_ec.png" alt="Energy-Conserving" class="img-responsive">
+        <img src="images/mine/brdf/matpreview/disney_bsdf_array.png" alt="Hybrid" class="img-responsive">
+    </div> <br>
+
+	<h2>Images as Textures</h2>
+
+	<ul>
+        <li class="codelist">
+            <code> ext/stb_image.h </code>
+        </li>
+        <li class="codelist">
+            <code> include/nori/texture.h </code>
+        </li>
+        <li class="codelist">
+            <code> src/texture.cpp </code>
+        </li>
+        <li class="codelist">
+            <code> src/imagetexture.cpp </code>
+        </li>
+	</ul>
+
+    <p>Images as textures are straightforward to implement, as we just normalize images into \( [0, 1]^2 \) coordinate and directly use \( (u, v) \) coordinates to query the texture. Scales and offsets of textures are handled by the <code>UVTextureMapping</code> class, which is also straightforward to implement (PBRT 10.2.1). We store images in <code>MIPMap</code> which supports image warping, such that the <code>ImageTexture</code> class automatically supports \( (u, v) \) coordinates that are negative or beyond \( [0, 1]^2 \) range. Basic anti-aliasing is achieved by the bilinear interpolation routine of <code>MIPMap</code>. Advanced anti-aliasing requires implementation of a complete new system for differential rays - I have finished this part of code but haven't got correct result yet. I believe this is beyond the work of 5 points and thus turned off differential rays in my code for now. </p>
+
+    <p>Currently I support loading jpg texture files through the <a href="https://github.com/nothings/stb">stb header library</a> </p>
+
+	<h3>Validation</h3>
+
+    <p> First I test a wood texture with diffuse surface under global illumination (<code>scenes/final-proj/texture/matpreview/image-texture_diffuse-wood.xml</code>): </p>
+    <div class="twentytwenty-container">
+        <img src="images/mine/texture/matpreview/image-texture_diffuse-wood.png" alt="Mine" class="img-responsive">
+        <img src="images/reference/texture/matpreview/matpreview_image-texture-diffuse-wood.png" alt="Mitsuba3" class="img-responsive">
+    </div> <br>
+
+    <p> I also test a floor-tile texture (<code>scenes/final-proj/texture/matpreview/image-texture_diffuse-floor.xml</code>): </p>
+    <div class="twentytwenty-container">
+        <img src="images/mine/texture/matpreview/image-texture_diffuse-floor.png" alt="Mine" class="img-responsive">
+        <img src="images/reference/texture/matpreview/matpreview_image-texture-diffuse-floor.png" alt="Mitsuba3" class="img-responsive">
+    </div> <br>
+
+    <p> I also validate \( uv \) mapping to verify that my implementation works for negative and greater than 1 \( uv\) coordinates (<code>scenes/final-proj/texture/matpreview/image-texture_diffuse-floor-uv.xml</code>): </p>
+    <div class="twentytwenty-container">
+        <img src="images/mine/texture/matpreview/image-texture_diffuse-floor-uv.png" alt="Mine" class="img-responsive">
+        <img src="images/reference/texture/matpreview/matpreview_image-texture-diffuse-floor-uv.png" alt="Mitsuba3" class="img-responsive">
+    </div> <br>
+
+    <p> Lastly, I validate the full pipeline so far - environment map, Disney BRDF, and images as textures (<code>scenes/final-proj/texture/matpreview/image-texture_disney-floor.xml</code>) - then compare to Mitsuba3 rendering. There are some differences, espcially around the indirectly illuminated parts. But overall I believe my rendering is close enough to the refernece image - the underlying Disney BRDF implementations are not exactly the same, afterall. </p>
+    <div class="twentytwenty-container">
+        <img src="images/mine/texture/matpreview/image-texture_disney-floor.png" alt="Mine" class="img-responsive">
+        <img src="images/reference/texture/matpreview/matpreview_image-texture-disney-floor.png" alt="Mitsuba3" class="img-responsive">
+    </div> <br>
+
+	<h2>Procedural Textures (with Perlin Noise)</h2>
+	<ul>
+        <li class="codelist">
+            <code> include/nori/texture.h </code>
+        </li>
+        <li class="codelist">
+            <code> src/texture.cpp </code>
+        </li>
+	</ul>
+
+    <p>Procedural texture is a very rough concept, it can be as simple as checkboard textures. Here we consider a specific type of procedural textures which are generated using Perlin noise (<a href="https://dl.acm.org/doi/10.1145/325165.325247">Perlin, 1985</a>). The implementation follows PBRT 10.6. Specifically, most of the codes for this feature are copied from PBRT-v3 code and adapted to Nori framework.</p>
+
+	<h3>Perlin Noise</h3>
+
+    <p>Perlin noise defines a 1D/2D/3D lattice on which integer lattice points are evaluated to be 0s but having non-zero gradients. In the implmentation, a <code>Noise()</code> function takes a \( (x, y, z) \) coordinate as input and returns a noise value. Inside the <code>Noise()</code> function, gradients on a pre-computed 3D Perlin noise lattice are obtained for the surronding 8 corners of the input \( (x, y, z) \), and then trilinearly interpolated to obtain the gradient/noise value for the query point \( (x, y, z) \).</p>
+
+	<h3>Fractional Brownian motion (FBm) and Turbulence</h3>
+
+    <p>The basic Perlin noise fucntion <code>Noise()</code> is band-limited, and can be used to contruct noise functions with controlled rate of variation. One particular type of such functions is to add variation over multiple scales, e.g. spectral synthesis. In spectral synthesis, we aim to represent a complex function \( f_s (x) \) by a sum of a set of variations of a basis function \( f(x) \): </p>
+    <p>
+    $$ 
+    \begin{aligned}
+    f_s(x) = \sum_i w_i f (s_i x)
+    \end{aligned}
+    $$
+    </p>
+    <p>where \( \{ w_i, s_i \} \) are varying weights and scales/frequencies for the basis function \( f(x) \). A general rule of thumb in practice is to assign \( s_i = 2 s_{i-1} \) and \( w_i = w_{i-1} / 2 \) such that with increasing frequency, the weight for the frequency band is decreasing. When the basis function is a Perlin noise function, the resulting \( f_s(x) \) is often referred to as Fractional Brownian motion (FBm). It has particular benefits such as having more complex variation compared to simple noise, being easy to compute, having well-defined frequency content, etc.</p>
+
+    <p>An useful variant of the FBm function is the Turbulence function, in which we use absolute value of a basis function to represent the complex function \( f_s (x) \):</p>
+    <p>
+    $$ 
+    \begin{aligned}
+    f_s(x) = \sum_i w_i \left| f (s_i x) \right|
+    \end{aligned}
+    $$
+    </p>
+    <p>The absolute operation gives rise to discontinuities in first-order derivatives, which can be desirable when generating bump maps for e.g. rock surfaces.</p>
+
+	<h3>Validation</h3>
+
+    <p> For validation, I show the random Polka dots texture (<code>scenes/final-proj/texture/matpreview/dots-texture_disney-floor.xml</code>) and the marble texture (<code>scenes/final-proj/texture/matpreview/marble-texture_disney-floor.xml</code>) results. Detailed implementation were described in PBR textbook 10.6.2 and 10.6.6, respectively. I tuned down illumination for the marble texture a bit, otherwise it would be too bright to see the texture. </p>
+
+    <div class="twentytwenty-container">
+        <img src="images/mine/texture/matpreview/dots-texture_disney-floor.png" alt="Polka Dots" class="img-responsive">
+    </div>
+    <div class="twentytwenty-container">
+        <img src="images/mine/texture/matpreview/marble-texture_disney-floor.png" alt="Marble" class="img-responsive">
+    </div>
+    <br> <br>
+
+	<h2>Advanced Camera Model</h2>
+	<ul>
+        <li class="codelist">
+            <code> src/perspective.cpp </code>
+        </li>
+	</ul>
+
+    <p>We implemented the following features to augment the perspective pinhole camera shipped with Nori: </p>
+
+	<ul>
+        <li>Depth of Field (Thin-len)</li>
+        <li>Lens Distortion (Radial)</li>
+        <li>Chromatic Abberation</li>
+	</ul>
+
+	<h3>Dpeth of Field</h3>
+
+    <p>For this feature we mainly followed PBRT 6.2.3. Specifically, when a plane of focus (specified by the focal distance of the len) and a non-zero aperture is provided, the <code>sampleRay()</code> function will sample a point on the aperture (assumed to be a disk), such that we have 2 rays: one ray \( (\mathbf{O}_1, \mathbf{D}_1) \) is the ray that starts from the sampled film/image plane location, through the aperture center, and hits the plane of focus; another ray \( (\mathbf{O}_2, \mathbf{D}_2) \) is the ray that we actually need to trace, it starts from the sampled point on the aperture and hits the intersection point of the first ray and the plane of focus. The goal is to compute the direction of the second ray, given its origin, the focal distance, and the origin and direction of the first ray. 
+
+    <p>Formally, define the focal distance as \( f_d \), the first ray's origin as \( \mathbf{O}_1 = (x_1^o, y_1^o, z_1^o) \) and its direction (unit vector) as \( \mathbf{D}_1 = (x_1^d, y_1^d, z_1^d) \), we first compute the intersection point \( \mathbf{P} \) of this ray and the plane of focus: </p>
+    <p>
+    $$ 
+    \begin{aligned}
+    \mathbf{P} &= \mathbf{O}_1 + t \cdot \mathbf{D}_1 \\
+    t &= \frac{f_d}{z_1^d}
+    \end{aligned}
+    $$
+    </p>
+    <p>Since we already know \( \mathbf{O}_2 \) which was sampled on the aperture, we can compute the direction of the second ray \( \mathbf{D}_2 = (x_2^d, y_2^d, z_2^d) \): </p>
+    <p>
+    $$ 
+    \begin{aligned}
+    \mathbf{D}_2 &= \frac{\mathbf{P} - \mathbf{O}_2}{\lVert \mathbf{P} - \mathbf{O}_2 \rVert} \\
+    \end{aligned}
+    $$
+    </p>
+    <figure>
+        <img width="60%" height="auto" src="images/mine/camera/DOF.png" alt="DOF" class="center"/>
+        <figcaption>Illustration for depth of field of thin-len cameras.</figcaption>
+    </figure> <br>
+
+	<h3>Lens Distortion (Radial)</h3>
+
+    <p>For radial lens distortion, we follow the division method for image undistortion (<a href="https://www.robots.ox.ac.uk/~vgg/publications/2001/Fitzgibbon01b/fitzgibbon01b.pdf">Fitzgibbon, 2001</a>). Specifically, we apply the inverse undistortion operation, distorting each undistorted sample \( (x_u, y_u) \) on the film/image plane by:</p>
+    <p>
+    $$ 
+    \begin{aligned}
+    x_d = x_u + (x_u - x_c)(1 + K_1 r^2 + K_2 r^4) \\
+    y_d = y_u + (y_u - y_c)(1 + K_1 r^2 + K_2 r^4)
+    \end{aligned}
+    $$
+    </p>
+    <p>where \( (x_c, y_c) \) is the user-specified distortion center, \(K_1, K_2\) are distortion coefficients. Positive \(K\)s will result in barrel distortion while negative \(K\)s will result in pincushion distortion.</p>
+
+	<h3>Chromatic Aberration</h3>
+
+    <p>Chromatic aberration is the result of lens having different focal distances for different wavelengths of light. This is straightforward to implement in a ray-tracing framework as we just need to extend depth of field by allowing RGB channels to have different focal distances, and trace each color channel separately when such a difference is present. This will require three times of samples per pixel to achieve a similar noise level compared to cameras without chromatic aberration effect.</p>
+
+    <p>In theory we could also have chromatic aberration effect even for pinhole cameras by utilizing the focal distances of different color channels, even though pinhole cameras should not have focal distance conceptually. This not a particularly physically plausible model, but nor is the pinhole camera.</p>
+
+    <p>Specifically, we need to define an "anchor" channel which we assume that rays for this channel is unmodified. We then compute the intersection point between the camera ray and the plane of focus of the anchor channel - this is the "point of focus" for non-zero aperture models, however for pinhole cameras this name does not have physical meaning, we simply use it to refer to the intersection point. For other non-anchor color channels, we offset the point of focus along the z-axis to the corresponding plane of focus of the target channel, and update the ray direction accordingly. This is equivalent to offseting film/image plane differently for each color channel, but more compatible with the depth of field module as we do not need to separately define offset parameters for film/image planes.</p>
+    <figure>
+        <img width="60%" height="auto" src="images/mine/camera/chromatic-aberration.png" alt="CA" class="center"/>
+        <figcaption>Illustration for chromatic aberration of pinhole cameras.</figcaption>
+    </figure> <br>
+
+	<h3>Validation</h3>
+
+    <p> First, I verify depth of field effect on different focal distances: </p>
+    <div class="twentytwenty-container">
+        <img src="images/mine/camera/dof_close.png" alt="DOF (Close)" class="img-responsive">
+        <img src="images/mine/camera/dof_medium.png" alt="DOF (Medium)" class="img-responsive">
+        <img src="images/mine/camera/dof_far.png" alt="DOF (Far)" class="img-responsive">
+    </div> <br>
+
+    <p> I validate barrel distortion and pincushion distortion: </p>
+    <div class="twentytwenty-container">
+        <img src="images/mine/camera/lens-distortion_barrel.png" alt="Barrel Distortion" class="img-responsive">
+        <img src="images/mine/camera/lens-distortion_pincushion.png" alt="Pincushion Distortion" class="img-responsive">
+    </div> <br>
+
+    <p> Then I show chromatic aberration, for both pinhole camera and thin-len camera: </p>
+    <div class="twentytwenty-container">
+        <img src="images/mine/camera/chromatic-aberration_pinhole.png" alt="Chromatic Aberration - Pinhole" class="img-responsive">
+        <img src="images/mine/camera/chromatic-aberration_thin-len.png" alt="Chromatic Aberration - Thin-len" class="img-responsive">
+    </div> <br>
+
+    <p> Lastly, puting everything together, we achieve a "bad" camera model with depth of field, pincushion distortion, and chromatic aberration: </p>
+    <div class="twentytwenty-container">
+        <img src="images/mine/camera/camera_dof-medium_chromatic-aberration_pinchusion.png" alt="Everything Combined" class="img-responsive">
+    </div> <br>
+
+	<h2>Rendering using the Euler cluster</h2>
+	<ul>
+        <li class="codelist">
+            <code> CMakeLists.txt </code>
+        </li>
+        <li class="codelist">
+            <code> include/nori/headless.h </code>
+        </li>
+        <li class="codelist">
+            <code> src/headless.cpp </code>
+        </li>
+	</ul>
+
+    <p>In order to render on the Euler cluster, we need to remove dependency on <code>nanogui</code> to enable headless rendering. We specify a macro <code>NORI_HEADLESS_RENDER</code>, which when defined, will tell the compiler to include <code>headless.h</code> instead of <code>gui.h</code>. <code>headless.h</code> and <code>headless.cpp</code> define a headless rendering class <code>NoriRenderer</code>, which does not depend on <code>nanogui</code>. The headless rendering mode can be enable by adding a <code>-DHEADLESS_RENDER=ON</code> option when calling <code>cmake</code> for configuration.</p>
+
+	<h3>Validation</h3>
+    In fact, all Nori rendering results in this report were rendered directly on Euler. Here I compare the renderings of the "bad" camera model from my local desktop and the Euler cluster, respectively.
+    <div class="twentytwenty-container">
+        <img src="images/mine/camera/camera_dof-medium_chromatic-aberration_pinchusion.png" alt="Euler" class="img-responsive">
+        <img src="images/mine/euler/camera_dof-medium_chromatic-aberration_pinchusion_local.png" alt="Local Desktop" class="img-responsive">
+    </div> <br>
+
+	<h2>Other Features (not graded)</h2>
+
+	<h3>MIP-Map</h3>
+	<ul>
+        <li class="codelist">
+            <code> CMakeLists.txt </code>
+        </li>
+        <li class="codelist">
+            <code> nori/include/mipmap.h </code>
+        </li>
+	</ul>
+
+    <p>The <code>MIPMap</code> class is copied from PBRT-v3 code and adapted to the Nori framework. Most of the code are directly compatible, with some parallelization code re-written under TBB semantics, as the PBRT-v3's parallelization classes are too cumbersome.</p>
+
+	<h3>Continuous Tangent Space for Spheres and Triganle Meshes</h3>
+	<ul>
+        <li class="codelist">
+            <code> src/sphere.cpp </code>
+        </li>
+        <li class="codelist">
+            <code> src/mesh.cpp </code>
+        </li>
+	</ul>
+
+    <p>Continuous tangent space is needed for rendering anisotropic BRDFs. The basic idea of calculating continuous tangent space is to use normalized partial derivatives \( \frac{dp}{du} \) and \( \frac{dp}{dv} \) to define the two orthogonal basis other than the normal. Here \( p = (x, y, z) \) denotes the point in object space, i.e. the space in which the sphere's center is aligned with \( (0, 0, 0) \) and without rotation. For analytical sphere we have:</p>
+    <p>
+    $$ 
+    \begin{aligned}
+    \frac{dp}{du} &= (-y, x, 0) \\
+    \frac{dp}{dv} &= (z \cos{\phi}, z \sin{\phi}, -r \sin{\theta}) \\
+    \text{tagent} &= \frac{\frac{dp}{dv}}{\lVert \frac{dp}{dv} \rVert} \\
+    \text{bitangent} &= \frac{\frac{dp}{du}}{\lVert \frac{dp}{du} \rVert}
+    \end{aligned}
+    $$
+    </p>
+    <p>where \( (\phi, \theta) \) is the spherical coordinate of \( p \) and \( r \) is the radius of the sphere.</p>
+
+    <p>For meshes, we follow PBRT 3.6.2 to compute \( \frac{dp}{du} \) and \( \frac{dp}{dv} \). Note that due to distortion between the \( uv \) coordinate and the 3D world coordinate, \( \frac{dp}{du} \), \( \frac{dp}{dv} \) and the surface normal do not necessarily form a set of orthogonal basis, i.e. \( \frac{dp}{du} \cdot \frac{dp}{dv} \neq 1 \). We fix this by setting tangent vector to the (normalized) \( \frac{dp}{du} \) and compute the cross product between the surface normal and the tangent vector to get the bitangent vector.</p>
+
+	<h2>Summary</h2>
+
+    <p>It turns out that the grass and soil in the motivation image requires many other features such as object instancing, hair BSDF, bump map, normal map, etc. On the other hand, the light bulb would be better modeled using thin-dielectrics BSDF. I am also not familiar with 3D modeling softwares in general, which would take some time to learn. Eventually I am running out of time and decide to not submit a final image.</p>
+
+	<h2>Acknowledgement</h2>
+
+	<ul>
+        <li>
+            All environment maps are downloaded from <a href="https://polyhaven.com/hdris">Poly Haven</a>, except for <code>scenes/final-proj/assets/texture/matpreview.exr</code> which comes with the matpreview scene in Mitsuba3.
+        </li>
+        <li>
+            Jpeg textures, the matpreview scene meshes and its environment map are extracted from <a href="https://www.mitsuba-renderer.org/">Mitsuba3</a>.
+        </li>
+	</ul>
+
+</div>
+</div>
+
+
+<!-- Bootstrap core JavaScript -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
+<script src="resources/bootstrap.min.js"></script>
+<script src="resources/jquery.event.move.js"></script>
+<script src="resources/jquery.twentytwenty.js"></script>
+
+
+<script>
+$(window).load(function(){$(".twentytwenty-container").twentytwenty({default_offset_pct: 0.5});});
+</script>
+
+</body>
+</html>
