@@ -462,7 +462,7 @@
 			<div class="column">
 				<img src="images/mine/tests/warptest-chi2-GTR2-x8e-1-y8e-1.png" style="width:100%">
 			</div>
-			<figcaption>GTR2, \( \alpha_x = 0.2, \alpha_y = 0.2 \).</figcaption>
+			<figcaption>GTR2, \( \alpha_x = 0.8, \alpha_y = 0.8 \).</figcaption>
 		</figure>
 	</div> <br>
 	<div class="row">
@@ -776,26 +776,26 @@
 
 	<h3>Validation</h3>
 
-    <p> First, I verify depth of field effect on different focal distances: </p>
+    <p> First, I verify depth of field effect on different focal distances (<code>scenes/final-proj/camera/dof_*.xml</code>): </p>
     <div class="twentytwenty-container">
         <img src="images/mine/camera/dof_close.png" alt="DOF (Close)" class="img-responsive">
         <img src="images/mine/camera/dof_medium.png" alt="DOF (Medium)" class="img-responsive">
         <img src="images/mine/camera/dof_far.png" alt="DOF (Far)" class="img-responsive">
     </div> <br>
 
-    <p> I validate barrel distortion and pincushion distortion: </p>
+    <p> I validate barrel distortion<code>scenes/final-proj/camera/lens-distortion_barrel.xml</code> and pincushion distortion<code>scenes/final-proj/camera/lens-distortion_pincushion.xml</code>: </p>
     <div class="twentytwenty-container">
         <img src="images/mine/camera/lens-distortion_barrel.png" alt="Barrel Distortion" class="img-responsive">
         <img src="images/mine/camera/lens-distortion_pincushion.png" alt="Pincushion Distortion" class="img-responsive">
     </div> <br>
 
-    <p> Then I show chromatic aberration, for both pinhole camera and thin-len camera: </p>
+    <p> Then I show chromatic aberration, for both pinhole camera<code>scenes/final-proj/camera/chromatic-aberration_pinhole.xml</code> and thin-len camera<code>scenes/final-proj/camera/chromatic-aberration_thin-len.xml</code>: </p>
     <div class="twentytwenty-container">
         <img src="images/mine/camera/chromatic-aberration_pinhole.png" alt="Chromatic Aberration - Pinhole" class="img-responsive">
         <img src="images/mine/camera/chromatic-aberration_thin-len.png" alt="Chromatic Aberration - Thin-len" class="img-responsive">
     </div> <br>
 
-    <p> Lastly, puting everything together, we achieve a "bad" camera model with depth of field, pincushion distortion, and chromatic aberration: </p>
+    <p> Lastly, puting everything together, we achieve a "bad" camera model with depth of field, pincushion distortion, and chromatic aberration<code>scenes/final-proj/camera/camera_dof-medium_chromatic-aberration_pinchusion.xml</code>: </p>
     <div class="twentytwenty-container">
         <img src="images/mine/camera/camera_dof-medium_chromatic-aberration_pinchusion.png" alt="Everything Combined" class="img-responsive">
     </div> <br>
