@@ -652,7 +652,7 @@
         <img src="images/reference/texture/matpreview/matpreview_image-texture-diffuse-floor-uv.png" alt="Mitsuba3" class="img-responsive">
     </div> <br>
 
-    <p> Lastly, I validate the full pipeline so far - environment map, Disney BRDF, and images as textures (<code>scenes/final-proj/texture/matpreview/image-texture_disney-floor.xml</code>) - then compare to Mitsuba3 rendering. There are some differences, espcially around the indirectly illuminated parts. But overall I believe my rendering is close enough to the refernece image - the underlying Disney BRDF implementations are not exactly the same, afterall. </p>
+    <p> Lastly, I validate the full pipeline so far - environment map, Disney BRDF, and images as textures (<code>scenes/final-proj/texture/matpreview/image-texture_disney-floor.xml</code>) - then compare to Mitsuba3 rendering. There are some differences, espcially around the indirectly illuminated parts. But overall I believe my rendering is close enough to the refernece image - the difference should be due to the small misalignment between my environment map and Mitsuba3's environment map (this is most obvious when the material has specular reflections), as well as the fact that the underlying Disney/Principled BRDF implementations are not exactly the same, e.g. different sampling weight for each term. </p>
     <div class="twentytwenty-container">
         <img src="images/mine/texture/matpreview/image-texture_disney-floor.png" alt="Mine" class="img-responsive">
         <img src="images/reference/texture/matpreview/matpreview_image-texture-disney-floor.png" alt="Mitsuba3" class="img-responsive">
